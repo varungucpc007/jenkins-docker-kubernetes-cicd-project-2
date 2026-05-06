@@ -3,13 +3,15 @@ pipeline {
 
     environment {
         IMAGE_NAME = "varungucpc007/flask-k8s-app"
+        DOCKER_CREDENTIALS = "dockerhub-creds"
+        KUBE_CONFIG = "kubeconfig"
+        GIT_REPO = "https://github.com/varungucpc007/jenkins-docker-kubernetes-cicd-project-2.git"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/varungucpc007/jenkins-docker-kubernetes-cicd-project-2.git'
+                git branch: 'main', url: "${GIT_REPO}"
             }
         }
 
@@ -27,7 +29,7 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
+                    credentialsId: "${DOCKER_CREDENTIALS}",
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
@@ -43,6 +45,8 @@ pipeline {
 
                     docker push %IMAGE_NAME%:latest
                     if errorlevel 1 exit /b 1
+
+                    docker logout
                     '''
                 }
             }
@@ -50,7 +54,10 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                withCredentials([file(
+                    credentialsId: "${KUBE_CONFIG}",
+                    variable: 'KUBECONFIG'
+                )]) {
                     bat '''
                     set KUBECONFIG=%KUBECONFIG%
 
