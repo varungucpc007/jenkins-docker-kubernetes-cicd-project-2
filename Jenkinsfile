@@ -28,40 +28,41 @@ pipeline {
             }
         }
 
-        stage('Push Docker Image') {
-            steps {
-                bat '''
-                @echo off
+       stage('Push Docker Image') {
+    steps {
+        bat '''
+        @echo off
 
-                if not exist docker_pass.txt (
-                    echo docker_pass.txt not found
-                    exit /b 1
-                )
+        set DOCKER_USER=varungucpc007
 
-                set /p DOCKER_PASS=<docker_pass.txt
+        if not exist docker_pass.txt (
+            echo docker_pass.txt not found
+            exit /b 1
+        )
 
-                echo Logging into Docker Hub...
-                echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                if errorlevel 1 exit /b 1
+        set /p DOCKER_PASS=<docker_pass.txt
 
-                echo Pushing build tag...
-                docker push %IMAGE_NAME%:%BUILD_NUMBER%
-                if errorlevel 1 exit /b 1
+        echo Logging into Docker Hub...
+        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+        if errorlevel 1 exit /b 1
 
-                echo Tagging latest...
-                docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
-                if errorlevel 1 exit /b 1
+        echo Pushing build tag...
+        docker push %IMAGE_NAME%:%BUILD_NUMBER%
+        if errorlevel 1 exit /b 1
 
-                echo Pushing latest tag...
-                docker push %IMAGE_NAME%:latest
-                if errorlevel 1 exit /b 1
+        echo Tagging latest...
+        docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
+        if errorlevel 1 exit /b 1
 
-                docker logout
+        echo Pushing latest tag...
+        docker push %IMAGE_NAME%:latest
+        if errorlevel 1 exit /b 1
 
-                exit /b 0
-                '''
-            }
-        }
+        docker logout
+        exit /b 0
+        '''
+    }
+}
 
         stage('Deploy to Kubernetes') {
             steps {
