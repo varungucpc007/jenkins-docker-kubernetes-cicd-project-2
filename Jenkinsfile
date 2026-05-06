@@ -40,10 +40,8 @@ pipeline {
             exit /b 1
         )
 
-        set /p DOCKER_PASS=<docker_pass.txt
-
         echo Logging into Docker Hub...
-        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+        type docker_pass.txt | docker login -u %DOCKER_USER% --password-stdin
         if errorlevel 1 exit /b 1
 
         echo Pushing build tag...
