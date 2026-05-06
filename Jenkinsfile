@@ -9,17 +9,17 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                url: 'https://github.com/varungucpc007/jenkins-docker-kubernetes-cicd-project-2.git'
+                    url: 'https://github.com/varungucpc007/jenkins-docker-kubernetes-cicd-project-2.git'
             }
         }
 
         stage('Build Docker Image') {
-    steps {
-        dir('app') {
-            bat 'docker build -t %IMAGE_NAME%:%BUILD_NUMBER% .'
+            steps {
+                dir('app') {
+                    bat 'docker build -t %IMAGE_NAME%:%BUILD_NUMBER% .'
+                }
+            }
         }
-    }
-}
 
         stage('Push Docker Image') {
             steps {
@@ -28,11 +28,11 @@ pipeline {
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh '''
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    docker push $IMAGE_NAME:$BUILD_NUMBER
-                    docker tag $IMAGE_NAME:$BUILD_NUMBER $IMAGE_NAME:latest
-                    docker push $IMAGE_NAME:latest
+                    bat '''
+                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                    docker push %IMAGE_NAME%:%BUILD_NUMBER%
+                    docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
+                    docker push %IMAGE_NAME%:latest
                     '''
                 }
             }
@@ -41,10 +41,9 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-                    sh '''
-                    sed -i "s|varungucpc007/flask-k8s-app:latest|$IMAGE_NAME:$BUILD_NUMBER|g" k8s/deployment.yaml
-                    kubectl apply -f k8s/deployment.yaml
-                    kubectl apply -f k8s/service.yaml
+                    bat '''
+                    kubectl set image deployment/flask-app flask-app=%IMAGE_NAME%:%BUILD_NUMBER%
+                    kubectl apply -f k8s\\service.yaml
                     '''
                 }
             }
