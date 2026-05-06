@@ -14,12 +14,12 @@ pipeline {
         }
 
         stage('Build Docker Image') {
-            steps {
-                dir('app') {
-                    sh 'docker build -t $IMAGE_NAME:$BUILD_NUMBER .'
-                }
-            }
+    steps {
+        dir('app') {
+            bat 'docker build -t %IMAGE_NAME%:%BUILD_NUMBER% .'
         }
+    }
+}
 
         stage('Push Docker Image') {
             steps {
