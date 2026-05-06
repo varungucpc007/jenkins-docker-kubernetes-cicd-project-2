@@ -14,39 +14,40 @@ pipeline {
         }
 
         stage('Build Docker Image') {
-            steps {
-                dir('app') {
-                    bat 'docker build -t %IMAGE_NAME%:%BUILD_NUMBER% .'
-                }
-            }
+    steps {
+        dir('app') {
+            bat '''
+            docker build -t %IMAGE_NAME%:%BUILD_NUMBER% .
+            if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
+            '''
         }
+    }
+}
 
         stage('Push Docker Image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    bat '''
-                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                    docker push %IMAGE_NAME%:%BUILD_NUMBER%
-                    docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
-                    docker push %IMAGE_NAME%:latest
-                    '''
-                }
-            }
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'dockerhub-creds',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+        )]) {
+            bat '''
+            echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+            docker push %IMAGE_NAME%:%BUILD_NUMBER%
+            docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
+            docker push %IMAGE_NAME%:latest
+            '''
         }
+    }
+}
 
         stage('Deploy to Kubernetes') {
-            steps {
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-                    bat '''
-                    kubectl set image deployment/flask-app flask-app=%IMAGE_NAME%:%BUILD_NUMBER%
-                    kubectl apply -f k8s\\service.yaml
-                    '''
-                }
-            }
+    steps {
+        withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+            bat '''
+            kubectl set image deployment/flask-app flask-app=%IMAGE_NAME%:%BUILD_NUMBER%
+            kubectl apply -f k8s\\service.yaml
+            '''
         }
     }
 }
