@@ -17,6 +17,7 @@ pipeline {
             steps {
                 dir('app') {
                     bat '''
+                    @echo off
                     docker build -t %IMAGE_NAME%:%BUILD_NUMBER% .
                     if errorlevel 1 exit /b 1
                     '''
@@ -25,38 +26,31 @@ pipeline {
         }
 
         stage('Push Docker Image') {
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'dockerhub-creds',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-        )]) {
-            bat '''
-            @echo off
-            > docker_pass.txt echo %DOCKER_PASS%
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    bat '''
+                    @echo off
 
-            docker login -u %DOCKER_USER% --password-stdin < docker_pass.txt
-            if errorlevel 1 (
-                del docker_pass.txt
-                exit /b 1
-            )
+                    docker login -u %DOCKER_USER% -p %DOCKER_PASS%
+                    if errorlevel 1 exit /b 1
 
-            del docker_pass.txt
+                    docker push %IMAGE_NAME%:%BUILD_NUMBER%
+                    if errorlevel 1 exit /b 1
 
-            docker push %IMAGE_NAME%:%BUILD_NUMBER%
-            if errorlevel 1 exit /b 1
+                    docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
+                    if errorlevel 1 exit /b 1
 
-            docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
-            if errorlevel 1 exit /b 1
-
-            docker push %IMAGE_NAME%:latest
-            if errorlevel 1 exit /b 1
-
-            docker logout
-            '''
+                    docker push %IMAGE_NAME%:latest
+                    if errorlevel 1 exit /b 1
+                    '''
+                }
+            }
         }
-    }
-}
+
         stage('Deploy to Kubernetes') {
             steps {
                 withCredentials([file(
@@ -64,6 +58,7 @@ pipeline {
                     variable: 'KUBECONFIG'
                 )]) {
                     bat '''
+                    @echo off
                     set KUBECONFIG=%KUBECONFIG%
 
                     kubectl set image deployment/flask-app flask-app=%IMAGE_NAME%:%BUILD_NUMBER%
