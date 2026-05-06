@@ -14,11 +14,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 deleteDir()
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[url: env.GIT_REPO]]
-                ])
+                git branch: 'main', url: "${GIT_REPO}"
             }
         }
 
@@ -26,11 +22,6 @@ pipeline {
             steps {
                 bat '''
                 @echo off
-                if not exist "app\\Dockerfile" (
-                    echo ERROR: app\\Dockerfile not found.
-                    exit /b 1
-                )
-
                 docker version
                 if errorlevel 1 exit /b 1
 
@@ -44,28 +35,26 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKERHUB_USER',
-                    passwordVariable: 'DOCKERHUB_PASS'
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
                 )]) {
                     bat '''
                     @echo off
                     echo Logging into Docker Hub...
-                    powershell -NoProfile -NonInteractive -Command "$env:DOCKERHUB_PASS | docker login -u $env:DOCKERHUB_USER --password-stdin; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
+
+                    powershell -NoProfile -NonInteractive -Command "$env:DOCKER_PASS | docker login -u $env:DOCKER_USER --password-stdin; exit $LASTEXITCODE"
                     if errorlevel 1 exit /b 1
 
-                    echo Tagging latest...
                     docker tag "%IMAGE_NAME%:%BUILD_NUMBER%" "%IMAGE_NAME%:latest"
                     if errorlevel 1 exit /b 1
 
-                    echo Pushing build tag...
                     docker push "%IMAGE_NAME%:%BUILD_NUMBER%"
                     if errorlevel 1 exit /b 1
 
-                    echo Pushing latest tag...
                     docker push "%IMAGE_NAME%:latest"
                     if errorlevel 1 exit /b 1
 
-                    docker logout >nul 2>&1
+                    docker logout
                     exit /b 0
                     '''
                 }
@@ -82,23 +71,10 @@ pipeline {
                     @echo off
                     set "KUBECONFIG=%KUBECONFIG_FILE%"
 
-                    kubectl version --client
+                    kubectl apply -f k8s\\deployment.yaml
                     if errorlevel 1 exit /b 1
 
-                    if not exist "k8s\\deployment.yaml" (
-                        echo ERROR: k8s\\deployment.yaml not found.
-                        exit /b 1
-                    )
-
-                    if not exist "k8s\\service.yaml" (
-                        echo ERROR: k8s\\service.yaml not found.
-                        exit /b 1
-                    )
-
-                    kubectl apply -f "k8s\\deployment.yaml"
-                    if errorlevel 1 exit /b 1
-
-                    kubectl apply -f "k8s\\service.yaml"
+                    kubectl apply -f k8s\\service.yaml
                     if errorlevel 1 exit /b 1
 
                     kubectl set image deployment/flask-app flask-app="%IMAGE_NAME%:%BUILD_NUMBER%"
@@ -109,22 +85,6 @@ pipeline {
                     '''
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            bat '''
-            @echo off
-            docker logout >nul 2>&1
-            exit /b 0
-            '''
-        }
-        success {
-            echo "Pipeline completed successfully. Image: ${env.IMAGE_NAME}:${env.BUILD_NUMBER}"
-        }
-        failure {
-            echo 'Pipeline failed. Check the stage log above for the exact command that failed.'
         }
     }
 }
