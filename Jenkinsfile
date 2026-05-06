@@ -3,10 +3,11 @@ pipeline {
 
     environment {
         IMAGE_NAME = "varungucpc007/flask-k8s-app"
-        GIT_REPO = "https://github.com/varungucpc007/jenkins-docker-kubernetes-cicd-project-2.git"
+        GIT_REPO   = "https://github.com/varungucpc007/jenkins-docker-kubernetes-cicd-project-2.git"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 git branch: 'main', url: "${GIT_REPO}"
@@ -20,6 +21,7 @@ pipeline {
                     @echo off
                     docker build -t %IMAGE_NAME%:%BUILD_NUMBER% .
                     if errorlevel 1 exit /b 1
+                    exit /b 0
                     '''
                 }
             }
@@ -35,17 +37,25 @@ pipeline {
                     bat '''
                     @echo off
 
-                    docker login -u %DOCKER_USER% -p %DOCKER_PASS%
+                    echo Logging into Docker Hub...
+                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
                     if errorlevel 1 exit /b 1
 
+                    echo Pushing build tag...
                     docker push %IMAGE_NAME%:%BUILD_NUMBER%
                     if errorlevel 1 exit /b 1
 
+                    echo Tagging latest...
                     docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
                     if errorlevel 1 exit /b 1
 
+                    echo Pushing latest tag...
                     docker push %IMAGE_NAME%:latest
                     if errorlevel 1 exit /b 1
+
+                    docker logout
+
+                    exit /b 0
                     '''
                 }
             }
@@ -66,6 +76,8 @@ pipeline {
 
                     kubectl apply -f k8s\\service.yaml
                     if errorlevel 1 exit /b 1
+
+                    exit /b 0
                     '''
                 }
             }
