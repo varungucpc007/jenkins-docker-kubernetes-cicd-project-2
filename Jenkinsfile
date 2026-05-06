@@ -4,6 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = "varungucpc007/flask-k8s-app"
         GIT_REPO   = "https://github.com/varungucpc007/jenkins-docker-kubernetes-cicd-project-2.git"
+        DOCKER_USER = "varungucpc007"
     }
 
     stages {
@@ -29,35 +30,36 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    bat '''
-                    @echo off
+                bat '''
+                @echo off
 
-                    echo Logging into Docker Hub...
-                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                    if errorlevel 1 exit /b 1
+                if not exist docker_pass.txt (
+                    echo docker_pass.txt not found
+                    exit /b 1
+                )
 
-                    echo Pushing build tag...
-                    docker push %IMAGE_NAME%:%BUILD_NUMBER%
-                    if errorlevel 1 exit /b 1
+                set /p DOCKER_PASS=<docker_pass.txt
 
-                    echo Tagging latest...
-                    docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
-                    if errorlevel 1 exit /b 1
+                echo Logging into Docker Hub...
+                echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                if errorlevel 1 exit /b 1
 
-                    echo Pushing latest tag...
-                    docker push %IMAGE_NAME%:latest
-                    if errorlevel 1 exit /b 1
+                echo Pushing build tag...
+                docker push %IMAGE_NAME%:%BUILD_NUMBER%
+                if errorlevel 1 exit /b 1
 
-                    docker logout
+                echo Tagging latest...
+                docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
+                if errorlevel 1 exit /b 1
 
-                    exit /b 0
-                    '''
-                }
+                echo Pushing latest tag...
+                docker push %IMAGE_NAME%:latest
+                if errorlevel 1 exit /b 1
+
+                docker logout
+
+                exit /b 0
+                '''
             }
         }
 
