@@ -25,31 +25,38 @@ pipeline {
         }
 
         stage('Push Docker Image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    bat '''
-                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                    if errorlevel 1 exit /b 1
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'dockerhub-creds',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+        )]) {
+            bat '''
+            @echo off
+            > docker_pass.txt echo %DOCKER_PASS%
 
-                    docker push %IMAGE_NAME%:%BUILD_NUMBER%
-                    if errorlevel 1 exit /b 1
+            docker login -u %DOCKER_USER% --password-stdin < docker_pass.txt
+            if errorlevel 1 (
+                del docker_pass.txt
+                exit /b 1
+            )
 
-                    docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
-                    if errorlevel 1 exit /b 1
+            del docker_pass.txt
 
-                    docker push %IMAGE_NAME%:latest
-                    if errorlevel 1 exit /b 1
+            docker push %IMAGE_NAME%:%BUILD_NUMBER%
+            if errorlevel 1 exit /b 1
 
-                    docker logout
-                    '''
-                }
-            }
+            docker tag %IMAGE_NAME%:%BUILD_NUMBER% %IMAGE_NAME%:latest
+            if errorlevel 1 exit /b 1
+
+            docker push %IMAGE_NAME%:latest
+            if errorlevel 1 exit /b 1
+
+            docker logout
+            '''
         }
-
+    }
+}
         stage('Deploy to Kubernetes') {
             steps {
                 withCredentials([file(
