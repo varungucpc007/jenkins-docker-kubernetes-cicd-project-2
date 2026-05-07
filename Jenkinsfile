@@ -101,6 +101,14 @@ pipeline {
                 bat '''
                 @echo off
                 setlocal
+
+                if "%KUBECONFIG_PATH%"=="" set "KUBECONFIG_PATH=C:\\Users\\varun\\.kube\\config"
+                if "%KUBE_NAMESPACE%"=="" set "KUBE_NAMESPACE=default"
+                if "%K8S_DIR%"=="" set "K8S_DIR=k8s"
+                if "%DEPLOYMENT_NAME%"=="" set "DEPLOYMENT_NAME=flask-app"
+                if "%CONTAINER_NAME%"=="" set "CONTAINER_NAME=flask-app"
+                if "%KUBECTL_VALIDATE%"=="" set "KUBECTL_VALIDATE=false"
+
                 set "KUBECONFIG=%KUBECONFIG_PATH%"
 
                 if not exist "%KUBECONFIG%" (
