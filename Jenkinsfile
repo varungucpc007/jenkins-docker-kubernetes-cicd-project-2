@@ -8,14 +8,15 @@ pipeline {
 
     parameters {
         string(name: 'GIT_REPO', defaultValue: 'https://github.com/varungucpc007/jenkins-docker-kubernetes-cicd-project-2.git', description: 'Git repository URL')
-        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to build')
+        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch')
         string(name: 'IMAGE_NAME', defaultValue: 'varungucpc007/flask-k8s-app', description: 'Docker image name')
         string(name: 'APP_DIR', defaultValue: 'app', description: 'Folder containing Dockerfile')
         string(name: 'K8S_DIR', defaultValue: 'k8s', description: 'Folder containing Kubernetes YAML files')
         string(name: 'DEPLOYMENT_NAME', defaultValue: 'flask-app', description: 'Kubernetes deployment name')
         string(name: 'CONTAINER_NAME', defaultValue: 'flask-app', description: 'Kubernetes container name')
         string(name: 'KUBE_NAMESPACE', defaultValue: 'default', description: 'Kubernetes namespace')
-        string(name: 'DOCKER_CREDENTIALS_ID', defaultValue: 'dockerhub-creds', description: 'Jenkins Docker Hub credential ID')
+        string(name: 'DOCKER_USERNAME', defaultValue: 'varungucpc007', description: 'Docker Hub username')
+        password(name: 'DOCKER_PASSWORD', defaultValue: 'dckr_pat_GEGWJBgd_ptD5hmekEn2UrY7BwY', description: 'Docker Hub access token')
         string(name: 'KUBECONFIG_CREDENTIALS_ID', defaultValue: 'kubeconfig', description: 'Jenkins kubeconfig secret file credential ID')
     }
 
@@ -45,7 +46,7 @@ pipeline {
                 docker version
                 if errorlevel 1 exit /b 1
 
-                echo Building image %IMAGE_NAME%:%IMAGE_TAG% ...
+                echo Building Docker image %IMAGE_NAME%:%IMAGE_TAG%
                 docker build -t "%IMAGE_NAME%:%IMAGE_TAG%" "%APP_DIR%"
                 if errorlevel 1 exit /b 1
 
@@ -57,24 +58,33 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: "${params.DOCKER_CREDENTIALS_ID}",
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
+                withEnv([
+                    "DOCKER_USER=${params.DOCKER_USERNAME}",
+                    "DOCKER_PASS=${params.DOCKER_PASSWORD}"
+                ]) {
                     bat '''
                     @echo off
                     setlocal
 
-                    echo Logging into Docker registry...
+                    if "%DOCKER_USER%"=="" (
+                        echo ERROR: DOCKER_USERNAME parameter is empty.
+                        exit /b 1
+                    )
+
+                    if "%DOCKER_PASS%"=="" (
+                        echo ERROR: DOCKER_PASSWORD parameter is empty. Use Docker Hub access token here.
+                        exit /b 1
+                    )
+
+                    echo Logging into Docker Hub as %DOCKER_USER%
                     powershell -NoProfile -NonInteractive -Command "$env:DOCKER_PASS | docker login -u $env:DOCKER_USER --password-stdin; exit $LASTEXITCODE"
                     if errorlevel 1 exit /b 1
 
-                    echo Pushing image %IMAGE_NAME%:%IMAGE_TAG% ...
+                    echo Pushing Docker image %IMAGE_NAME%:%IMAGE_TAG%
                     docker push "%IMAGE_NAME%:%IMAGE_TAG%"
                     if errorlevel 1 exit /b 1
 
-                    echo Pushing image %IMAGE_NAME%:latest ...
+                    echo Pushing Docker image %IMAGE_NAME%:latest
                     docker push "%IMAGE_NAME%:latest"
                     if errorlevel 1 exit /b 1
 
@@ -109,18 +119,15 @@ pipeline {
                     kubectl version --client
                     if errorlevel 1 exit /b 1
 
-                    echo Applying Kubernetes manifests...
                     kubectl apply -n "%KUBE_NAMESPACE%" -f "%K8S_DIR%\\deployment.yaml"
                     if errorlevel 1 exit /b 1
 
                     kubectl apply -n "%KUBE_NAMESPACE%" -f "%K8S_DIR%\\service.yaml"
                     if errorlevel 1 exit /b 1
 
-                    echo Updating deployment image...
                     kubectl set image -n "%KUBE_NAMESPACE%" "deployment/%DEPLOYMENT_NAME%" "%CONTAINER_NAME%=%IMAGE_NAME%:%IMAGE_TAG%"
                     if errorlevel 1 exit /b 1
 
-                    echo Waiting for rollout...
                     kubectl rollout status -n "%KUBE_NAMESPACE%" "deployment/%DEPLOYMENT_NAME%" --timeout=180s
                     if errorlevel 1 exit /b 1
                     '''
@@ -136,12 +143,6 @@ pipeline {
             docker logout >nul 2>&1
             exit /b 0
             '''
-        }
-        success {
-            echo "SUCCESS: ${params.IMAGE_NAME}:${env.IMAGE_TAG} deployed to namespace ${params.KUBE_NAMESPACE}"
-        }
-        failure {
-            echo 'FAILED: open the failed stage logs in Jenkins to see the exact command error.'
         }
     }
 }
