@@ -15,9 +15,10 @@ pipeline {
         string(name: 'DEPLOYMENT_NAME', defaultValue: 'flask-app', description: 'Kubernetes deployment name')
         string(name: 'CONTAINER_NAME', defaultValue: 'flask-app', description: 'Kubernetes container name')
         string(name: 'KUBE_NAMESPACE', defaultValue: 'default', description: 'Kubernetes namespace')
+        string(name: 'KUBECONFIG_PATH', defaultValue: 'C:\\Users\\varun\\.kube\\config', description: 'Live kubeconfig path on Jenkins Windows machine')
+        booleanParam(name: 'KUBECTL_VALIDATE', defaultValue: false, description: 'Validate Kubernetes YAML against cluster OpenAPI schema')
         string(name: 'DOCKER_USERNAME', defaultValue: 'varungucpc007', description: 'Docker Hub username')
         password(name: 'DOCKER_PASSWORD', defaultValue: 'dckr_pat_GEGWJBgd_ptD5hmekEn2UrY7BwY', description: 'Docker Hub access token')
-        string(name: 'KUBECONFIG_CREDENTIALS_ID', defaultValue: 'kubeconfig', description: 'Jenkins kubeconfig secret file credential ID')
     }
 
     environment {
@@ -97,41 +98,68 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([file(
-                    credentialsId: "${params.KUBECONFIG_CREDENTIALS_ID}",
-                    variable: 'KUBECONFIG_FILE'
-                )]) {
-                    bat '''
-                    @echo off
-                    setlocal
-                    set "KUBECONFIG=%KUBECONFIG_FILE%"
+                bat '''
+                @echo off
+                setlocal
+                set "KUBECONFIG=%KUBECONFIG_PATH%"
 
-                    if not exist "%K8S_DIR%\\deployment.yaml" (
-                        echo ERROR: %K8S_DIR%\\deployment.yaml not found.
-                        exit /b 1
-                    )
+                if not exist "%KUBECONFIG%" (
+                    echo ERROR: kubeconfig not found at %KUBECONFIG%
+                    echo Fix KUBECONFIG_PATH or start/create your Kubernetes cluster first.
+                    exit /b 1
+                )
 
-                    if not exist "%K8S_DIR%\\service.yaml" (
-                        echo ERROR: %K8S_DIR%\\service.yaml not found.
-                        exit /b 1
-                    )
+                if not exist "%K8S_DIR%\\deployment.yaml" (
+                    echo ERROR: %K8S_DIR%\\deployment.yaml not found.
+                    exit /b 1
+                )
 
-                    kubectl version --client
+                if not exist "%K8S_DIR%\\service.yaml" (
+                    echo ERROR: %K8S_DIR%\\service.yaml not found.
+                    exit /b 1
+                )
+
+                kubectl version --client
+                if errorlevel 1 exit /b 1
+
+                echo Current Kubernetes context:
+                kubectl config current-context
+                if errorlevel 1 exit /b 1
+
+                echo Checking Kubernetes cluster connection...
+                kubectl cluster-info
+                if errorlevel 1 (
+                    echo ERROR: Kubernetes API server is not reachable.
+                    echo Your kubeconfig points to a local cluster that is not running or has a changed port.
+                    echo Start Docker Desktop Kubernetes or run: minikube start
+                    exit /b 1
+                )
+
+                kubectl get namespace "%KUBE_NAMESPACE%" >nul 2>&1
+                if errorlevel 1 (
+                    echo Creating namespace %KUBE_NAMESPACE%
+                    kubectl create namespace "%KUBE_NAMESPACE%"
                     if errorlevel 1 exit /b 1
+                )
 
-                    kubectl apply -n "%KUBE_NAMESPACE%" -f "%K8S_DIR%\\deployment.yaml"
-                    if errorlevel 1 exit /b 1
+                set "VALIDATE_ARG=--validate=false"
+                if /I "%KUBECTL_VALIDATE%"=="true" set "VALIDATE_ARG=--validate=true"
 
-                    kubectl apply -n "%KUBE_NAMESPACE%" -f "%K8S_DIR%\\service.yaml"
-                    if errorlevel 1 exit /b 1
+                echo Applying Kubernetes manifests...
+                kubectl apply %VALIDATE_ARG% -n "%KUBE_NAMESPACE%" -f "%K8S_DIR%\\deployment.yaml"
+                if errorlevel 1 exit /b 1
 
-                    kubectl set image -n "%KUBE_NAMESPACE%" "deployment/%DEPLOYMENT_NAME%" "%CONTAINER_NAME%=%IMAGE_NAME%:%IMAGE_TAG%"
-                    if errorlevel 1 exit /b 1
+                kubectl apply %VALIDATE_ARG% -n "%KUBE_NAMESPACE%" -f "%K8S_DIR%\\service.yaml"
+                if errorlevel 1 exit /b 1
 
-                    kubectl rollout status -n "%KUBE_NAMESPACE%" "deployment/%DEPLOYMENT_NAME%" --timeout=180s
-                    if errorlevel 1 exit /b 1
-                    '''
-                }
+                echo Updating deployment image...
+                kubectl set image -n "%KUBE_NAMESPACE%" "deployment/%DEPLOYMENT_NAME%" "%CONTAINER_NAME%=%IMAGE_NAME%:%IMAGE_TAG%"
+                if errorlevel 1 exit /b 1
+
+                echo Waiting for rollout...
+                kubectl rollout status -n "%KUBE_NAMESPACE%" "deployment/%DEPLOYMENT_NAME%" --timeout=180s
+                if errorlevel 1 exit /b 1
+                '''
             }
         }
     }
